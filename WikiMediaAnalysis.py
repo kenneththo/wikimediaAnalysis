@@ -1,0 +1,72 @@
+from WikiMediaParser import WikiMediaParser
+from NegativeSamplingModel import NegativeSamplingModel
+from eigenVectorCentralityTest import eigenVectorCentralityTest
+import seaborn as sns
+
+
+
+def main(result):
+
+    if result.command == 'download':
+        parser = WikiMediaParser(None)
+        filename = parser.downloadSourceFile(result.date)
+        print("Output filename:", filename)
+
+    if result.command == 'analysis':
+        parser = WikiMediaParser(result.file)
+        dict_page = parser.loadWikiMediaXML()
+        df, title_refs_dict = parser.PrepareData(dict_page)
+        sample_title_refs_dict = parser.getSamples('California', 2, title_refs_dict)
+
+        parser.RunStats(df, plot=True)
+        centralityTest = eigenVectorCentralityTest()
+        print("generating vertice & edges...")
+        edgeList = centralityTest.createEdges(sample_title_refs_dict)
+        print("creating graph...")
+        centralityTest.createGraph(edgeList)
+        #centralityTest.plot()
+        print("computing centrality...")
+        res = centralityTest.ComputeTopKEigenVectorCentrality(centralityTest.graph, 10)
+
+        subgraph = centralityTest.getSubGraph('Los Angeles', 1)
+        centralityTest.ComputeTopKEigenVectorCentrality(subgraph, 10)
+        #centralityTest.plot()
+
+
+    if result.command == 'build':
+        model = NegativeSamplingModel(result.model, embeddedVectorDimSize=100, num_epochs=1, window_size=5)
+        word_target, word_context, labels, vocab_size, dictionary, reversed_dictionary, refList = \
+            model.generateInputSet(result.file, sampling='California')
+        model.createModel(word_target, word_context, labels, vocab_size)
+
+    elif result.command == 'predict':
+        word1 = result.x1.replace(' ','')
+        word2 = result.x2.replace(' ', '')
+        model = NegativeSamplingModel(result.model, embeddedVectorDimSize=100, num_epochs=1, window_size=5)
+        word_target, word_context, labels, vocab_size, dictionary, reversed_dictionary, refList = \
+            model.generateInputSet(result.file, sampling='California')
+        model.Load()
+        topk_df = model.PredictSimilarity(word1, word2, word_context, dictionary, reversed_dictionary)
+        model.plotTopK(topk_df, word1, word2)
+
+if __name__ == "__main__":
+
+    import sys
+    import argparse
+
+    parser = argparse.ArgumentParser(description="wikimedia analysis")
+    parser.add_argument('-c', action='store', dest='command', required=True,
+                        help='-download date | -analysis - f file | -c build -n modelName -f file | -c predict -x1 word1 -x2 word2 -f file')
+    parser.add_argument('-n', action='store', dest='model',
+                        help='model name')
+    parser.add_argument('-x1', action='store', dest='x1',
+                        help='word1')
+    parser.add_argument('-x2', action='store', dest='x2',
+                        help='word2')
+    parser.add_argument('-date', action='store', dest='date',
+                        help='wikimedia dump date')
+    parser.add_argument('-f', action='store', dest='file',
+                        help='wikimedia filename')
+    result = parser.parse_args()
+
+    main(result)
