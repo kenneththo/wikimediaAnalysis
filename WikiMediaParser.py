@@ -1,12 +1,13 @@
 import re
-#import urllib.request
-import urllib
+import urllib.request  # python3.5+
+#import urllib
 import bz2
 from xml.etree import ElementTree
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 from MongoDBClient import MongoDBClient
+import numpy as np
 
 
 
@@ -68,10 +69,13 @@ class WikiMediaParser(object):
             return titles[0], articles[0]
         return None, None
 
-    def loadWikiMediaXML(self):
+    def loadWikiMediaXML(self, file=None, mongo=True):
+        if file is not None:
+            self.file = file
         print("Loading ", self.file)
         dict_page = {}
         pageBlock = ""
+        i=0
         for line in open(self.file):
             pagebegin = False
             if "<page>" in line:
@@ -80,8 +84,15 @@ class WikiMediaParser(object):
                 title, article= self.processBlock(pageBlock)
                 if title is None or article is None or self.isRedirect(article): continue
                 dict_page[title] = article
-                #urlList, refList = self.extractLink(article)
+                urlList, refList = self.extractLink(article)
+                i += 1
+                #if i >= max:
+                #    break
+                if i%500 == 0: print("processed ", i, "pages")
+                if mongo:
+                    self.client.insert(title, article, urlList, refList)
             pageBlock = pageBlock + line
+
         return dict_page
 
     # https://en.wikipedia.org/wiki/Iterative_deepening_depth-first_search
@@ -97,10 +108,9 @@ class WikiMediaParser(object):
         return nodeSet
 
     def getSamples(self, root_title, depth, title_refs_dict):
-        if root_title in title_refs_dict:
-            print("found")
-        else:
-            print("not found")
+        if root_title not in title_refs_dict:
+            print("hmmm, thats very wierd")
+            return None
 
         sample_titles = set()
         sample_titles = self.DepthLimitedDFS(root_title, depth, title_refs_dict, sample_titles)
@@ -108,12 +118,7 @@ class WikiMediaParser(object):
         print("after sample :", list(sample_titles)[:10],len(sample_titles))
 
         sample_title_refs_dict = dict((k, title_refs_dict[k]) for k in sample_titles if k in title_refs_dict)
-        '''
-        sample_title_refs_dict = dict()
-        for title in sample_titles:
-            if title in title_refs_dict:
-                sample_title_refs_dict[title]=title_refs_dict[title]
-        '''
+
         return sample_title_refs_dict
 
 
@@ -121,17 +126,19 @@ class WikiMediaParser(object):
         url = "https://dumps.wikimedia.org/enwikivoyage/"+ create_date + "/"
         filename = "enwikivoyage-"+ create_date +"-pages-articles-multistream.xml.bz2"
         print("Downloading ", url + filename + " .....")
-        filename, _ = urllib.request.urlretrieve(url + filename, filename)
+        filename, _ = urllib.request.urlretrieve(url + filename, filename)  # python 3.5+
+        #filename, _ = urllib.urlretrieve(url + filename, filename)
         print("Download completed, extracting ", filename + " .....")
 
         zipfile = bz2.BZ2File(filename)  # open the file
         data = zipfile.read()  # get the decompressed data
-        newfilepath = filename[:-4]  # assuming the filepath ends with .bz2
+        newfilepath = "./" + filename[:-4]  # assuming the filepath ends with .bz2
         open(newfilepath, 'wb').write(data)  # write a uncompressed file
         print(newfilepath, " created")
         return newfilepath
 
-    def PrepareData(self, dict_page, plot=True):
+    '''
+    def PrepareData(self, dict_page, plot=True, mongo=True):
         title_refs_dict = {}
         df = pd.DataFrame(columns=['title', 'size_article', 'num_link'])
         i = 0
@@ -146,9 +153,36 @@ class WikiMediaParser(object):
                 #if i >= max:
                 #    break
                 if i%500 == 0: print("processed ", i, "articles")
+                if mongo:
+                    self.client.insert(title, article, urlList, refList)
         return df, title_refs_dict
+    '''
+    def getDataFromMongoDB(self):
+        dict_page, title_refs, title_urls = self.client.getAll()
+        return dict_page, title_refs, title_urls
 
-    def RunStats(self, df, plot=True):
+
+
+    def RunStats(self, dict_page, title_refs, title_urls, plot=True):
+        print("Building dataframe....")
+        df = pd.DataFrame(columns=['title', 'size_article', 'num_link'])
+        i=0
+        arr1 = np.empty(len(title_refs.keys()))
+        arr2 = np.empty(len(title_refs.keys()))
+        list = []
+        for title in dict_page.keys():
+            refs = title_refs[title]
+            urlList = title_urls[title]
+            article = dict_page[title]
+            refs = title_refs[title]
+            arr1[i] = len(article)
+            arr2[i] = len(urlList) + len(refs)
+            list.append(title)
+            i += 1
+
+        df['title'] = list
+        df['size_article'] = arr1
+        df['num_link'] = arr2
         print("Maximum:", df.iloc[df['num_link'].argmax()])
         print("Minimum:", df.iloc[df['num_link'].argmin()])
         print("Average # of Links:", df['num_link'].mean())

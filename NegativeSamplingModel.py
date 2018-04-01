@@ -71,9 +71,14 @@ class NegativeSamplingModel(object):
         self.model.save(self.modelName)
 
     def generateInputSet(self, file, sampling=None):
+        '''
         wParser = WikiMediaParser(file)
         dict_page = wParser.loadWikiMediaXML()
         df, title_refs_dict = wParser.PrepareData(dict_page)
+        '''
+        wParser = WikiMediaParser(None)
+        dict_page, title_refs_dict, title_urls = wParser.getDataFromMongoDB()
+
         if sampling is not None:
             title_refs_dict = wParser.getSamples(sampling, 1, title_refs_dict)
 
@@ -91,13 +96,13 @@ class NegativeSamplingModel(object):
         # filter out non alphabet
         finalWords = [x for x in list(unique_words_set) if x.isalpha()]
         print("number of unique alphabet-only words", len(finalWords))
-        print("and here are some samples:", finalWords[:10])
+        #print("and here are some samples:", finalWords[:10])
 
         num_most_common_words = len(finalWords)
         #if sampling is not None:
         #    num_most_common_words = int(num_most_common_words/3)
         data, dictionary, reversed_dictionary = self.build_dataset(list(finalWords), num_most_common_words)
-        print("data:", data[:7])
+        #print("data:", data[:7])
 
         vocab_size = len(finalWords)
         sampling_table = sequence.make_sampling_table(vocab_size)
@@ -120,7 +125,7 @@ class NegativeSamplingModel(object):
 
         word_context_set = set()
         word_context_set.update(word_context)
-        print("word_context_set=", len(word_context_set), len(word_context))
+        #print("word_context_set=", len(word_context_set), len(word_context))
 
         word_context_set_arr = np.array(list(word_context_set), dtype="int32")
 
@@ -129,37 +134,34 @@ class NegativeSamplingModel(object):
         word2_context = np.zeros(shape=(word_context_set_arr.shape[0]))
         word2_context.fill(dictionary[word2])
 
-        print("Size of word1:",len(word1_context), word1_context[:10] )
-        print("Size of word2:",len(word2_context), word2_context[:10] )
-        print("word_context_set_arr:", word_context_set_arr[:10])
+        #print("Size of word1:",len(word1_context), word1_context[:10] )
+        #print("Size of word2:",len(word2_context), word2_context[:10] )
+        #print("word_context_set_arr:", word_context_set_arr[:10])
 
         indexes = [reversed_dictionary[x] for x in word_context_set_arr]
 
         predict = self.model.predict([word1_context,word_context_set_arr])
-        print(len(word1_context), len(word_context_set_arr), len(predict))
+        #print(len(word1_context), len(word_context_set_arr), len(predict))
 
         df1 = pd.DataFrame(predict, index=indexes, columns=[word1])
 
         predict = self.model.predict([word2_context,word_context_set_arr])
-        print(len(word2_context), len(word_context_set_arr), len(predict))
+        #print(len(word2_context), len(word_context_set_arr), len(predict))
 
         df2 = pd.DataFrame(predict, index=indexes, columns=[word2])
 
         df_all = pd.concat([df1, df2], axis=1)
 
-
-        print(df_all.head(20))
-
         df_all[word1+'rank']=df_all[word1].rank(ascending=0,method='max')
         df_all[word2+'rank']=df_all[word2].rank(ascending=0,method='max')
-        print(df_all.sort_values(by=[word1+'rank'], ascending=[1]).head(10))
-        print(df_all.sort_values(by=[word2+'rank'], ascending=[1]).head(10))
+        #print(df_all.sort_values(by=[word1+'rank'], ascending=[1]).head(10))
+        #print(df_all.sort_values(by=[word2+'rank'], ascending=[1]).head(10))
         df_all['rank'] = df_all[word1+'rank'] + df_all[word2+'rank']
         topk_df = df_all.sort_values(by=['rank'], ascending=[1])[:topK]
         topk_df.index.name = 'word'
         print(topk_df)
-        topk_df.to_csv(self.modelName + "_topk.csv")
-        top_match = df_all.sort_values(by=['rank'], ascending=[0]).index.values[:10]
+        #topk_df.to_csv(self.modelName + "_topk.csv")
+        #top_match = df_all.sort_values(by=['rank'], ascending=[0]).index.values[:10]
         return topk_df
 
     def plotTopK(self, topk_df, x, y):
@@ -178,17 +180,17 @@ class NegativeSamplingModel(object):
         plt.xlabel(x)
         # Set y-axis label
         plt.ylabel(y)
-
-        print(topk_df['word'])
+        topk_df['label'] = topk_df.index.values
+        #print(topk_df.head(10))
 
         def label_point(x, y, val, ax):
             a = pd.concat({'x': x, 'y': y, 'val': val}, axis=1)
             print(a)
             for i, point in a.iterrows():
-                print(str(point['val']))
+                #print(str(point['val']))
                 ax.text(point['x'] + .02, point['y'], str(point['val']))
 
-        label_point(topk_df[x], topk_df[y], topk_df['word'], plt.gca())
+        label_point(topk_df[x], topk_df[y], topk_df['label'], plt.gca())
         plt.show()
 
 
