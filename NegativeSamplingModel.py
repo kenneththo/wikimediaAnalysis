@@ -21,8 +21,11 @@ class NegativeSamplingModel(object):
         self.num_epochs = num_epochs
         self.window_size = window_size
 
+    # Create the dataset for the documents. Words will be converted into index values.
+    # a dictionary and reverse dictionary are used for index-to-word lookup, which will
+    # be used at prediction.
+    # there are logic to choose only the most/least frequently used words
     def build_dataset(self, words, n_words):
-        """Process raw inputs into a dataset."""
         count = [['UNK', -1]]
         # use the most common words
         count.extend(collections.Counter(words).most_common(n_words - 1))
@@ -40,48 +43,46 @@ class NegativeSamplingModel(object):
                 index = 0  # dictionary['UNK']
                 unk_count += 1
             data.append(index)
-        #count[0][1] = unk_count
         reversed_dictionary = dict(zip(dictionary.values(), dictionary.keys()))
         return data, dictionary, reversed_dictionary
 
-
+    # Create the Model and train
     def createModel(self, word_target, word_context, labels, vocab_size):
         # create some input variables
         input_target = Input((1,))
         input_context = Input((1,))
 
         embedding = Embedding(vocab_size, self.embeddedVectorDimSize, input_length=1, name='embedding')
-
         target = embedding(input_target)
         target = Reshape((self.embeddedVectorDimSize, 1))(target)
         context = embedding(input_context)
         context = Reshape((self.embeddedVectorDimSize, 1))(context)
-        similarity = merge([target, context], mode='cos', dot_axes=0)
-        # now perform the dot product operation to get a similarity measure
         dot_product = merge([target, context], mode='dot', dot_axes=1)
         dot_product = Reshape((1,))(dot_product)
-        # add the sigmoid output layer
         output = Dense(1, activation='sigmoid')(dot_product)
-        # create the primary training model
         self.model = Model(input=[input_target, input_context], output=output)
-        self.model.compile(loss='binary_crossentropy', optimizer='adam')
-
+        self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+        self.model.summary()
         self.model.fit([word_target, word_context], labels, epochs=self.num_epochs)
-
         self.model.save(self.modelName)
 
+    # Generate the input word lists and the labels for training
+    # Sampling is the option for getting only subset of the pages. It uses the depth-limited BFS
+    # algo to iterate the adjacent list to collect all the articles under the given root. 
     def generateInputSet(self, file, sampling=None):
         '''
+        # load the data directly from file. This will take a while
         wParser = WikiMediaParser(file)
         dict_page = wParser.loadWikiMediaXML()
         df, title_refs_dict = wParser.PrepareData(dict_page)
         '''
+        # retrieve the data from MongoDB
         wParser = WikiMediaParser(None)
         dict_page, title_refs_dict, title_urls = wParser.getDataFromMongoDB()
 
         if sampling is not None:
+            # apply the name of the root (sampling) and the level of depth to iterate
             title_refs_dict = wParser.getSamples(sampling, 1, title_refs_dict)
-
 
         # generate sequence of words for all the "selected" pages
         unique_words_set = set()

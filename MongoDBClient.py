@@ -33,9 +33,9 @@ class MongoDBClient(object):
                 title_refs[json_text['title']] = json_text['refs']
             if 'urls' in json_text:
                 title_urls[json_text['title']] = json_text['urls']
-        print(len(dict_page))
-        print(len(title_refs))
-        print(len(title_urls))
+        #print(len(dict_page))
+        #print(len(title_refs))
+        #print(len(title_urls))
         return dict_page, title_refs, title_urls
 
 

@@ -48,6 +48,6 @@ class eigenVectorCentralityTest(object):
         return subgraph
 
 
-    def plot(self):
-        nx.draw(self.graph)
+    def plot(self, graph):
+        nx.draw(graph, with_labels = False)
         plt.show()

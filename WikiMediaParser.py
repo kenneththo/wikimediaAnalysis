@@ -165,24 +165,44 @@ class WikiMediaParser(object):
 
     def RunStats(self, dict_page, title_refs, title_urls, plot=True):
         print("Building dataframe....")
-        df = pd.DataFrame(columns=['title', 'size_article', 'num_link'])
+        df = pd.DataFrame(columns=['title', 'size_article', 'num_link', 'num_ref'])
         i=0
-        arr1 = np.empty(len(title_refs.keys()))
-        arr2 = np.empty(len(title_refs.keys()))
-        list = []
+        arr_article = np.empty(len(title_refs.keys()))
+        arr_UrlLink = np.empty(len(title_refs.keys()))
+        arr_ReferenceLink = np.empty(len(title_refs.keys()))
+        titlelist = []
         for title in dict_page.keys():
             refs = title_refs[title]
             urlList = title_urls[title]
             article = dict_page[title]
             refs = title_refs[title]
-            arr1[i] = len(article)
-            arr2[i] = len(urlList) + len(refs)
-            list.append(title)
+            arr_article[i] = len(article)
+            arr_UrlLink[i] = len(urlList)
+            arr_ReferenceLink[i] = len(refs)
+            titlelist.append(title)
             i += 1
 
-        df['title'] = list
-        df['size_article'] = arr1
-        df['num_link'] = arr2
+        df['title'] = titlelist
+        df['size_article'] = arr_article
+        df['num_link'] = arr_UrlLink
+        df['num_ref'] = arr_ReferenceLink
+        df['total_link'] = df['num_link'] + df['num_ref']
+
+        # run a stats for total links (url + ref)
+        print("Maximum:", df.iloc[df['total_link'].argmax()])
+        print("Minimum:", df.iloc[df['total_link'].argmin()])
+        print("Average # of Links:", df['total_link'].mean())
+        print("Median # of Links:", df['total_link'].median())
+
+        from statsmodels.formula.api import ols
+        model = ols("size_article ~ total_link", df).fit()
+        print(model.summary())
+
+        if plot:
+            sns.regplot(x='total_link', y='size_article', data=df)
+            plt.show()
+
+        # run a stats for url only
         print("Maximum:", df.iloc[df['num_link'].argmax()])
         print("Minimum:", df.iloc[df['num_link'].argmin()])
         print("Average # of Links:", df['num_link'].mean())

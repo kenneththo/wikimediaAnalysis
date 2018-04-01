@@ -40,9 +40,9 @@ def main(result):
         print("computing centrality...")
         res = centralityTest.ComputeTopKEigenVectorCentrality(centralityTest.graph, 10)
         print("")
-        subgraph = centralityTest.getSubGraph('Los Angeles', 1)
+        subgraph = centralityTest.getSubGraph('Los Angeles', 2)
         centralityTest.ComputeTopKEigenVectorCentrality(subgraph, 10)
-        #centralityTest.plot()
+        centralityTest.plot(subgraph)
 
 
     if result.command == 'build':
@@ -54,7 +54,7 @@ def main(result):
     elif result.command == 'predict':
         word1 = result.x1.replace(' ','')
         word2 = result.x2.replace(' ', '')
-        model = NegativeSamplingModel(result.model, embeddedVectorDimSize=100, num_epochs=1, window_size=5)
+        model = NegativeSamplingModel(result.model, embeddedVectorDimSize=100, num_epochs=3, window_size=5)
         word_target, word_context, labels, vocab_size, dictionary, reversed_dictionary, refList = \
             model.generateInputSet(result.file, sampling='California')
         model.Load()
